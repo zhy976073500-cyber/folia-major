@@ -1652,6 +1652,14 @@ export default {
     "normal": "标准",
     "chaotic": "混乱"
   },
+  "sageAnnouncement": {
+    "title": "目前优化最好的 iOS 版本！",
+    "intro": "原作者一直没有推出 iOS 版，抖音上却有一堆人拿着用 AI 部署的版本出来圈钱。我干脆自己部署了一个，免费分享给大家使用。",
+    "feedback": "问题反馈、版本更新：微信公众号搜索【Coco果粉营地】",
+    "more": "更多 iOS 优质资源：抖音搜索【Coco果粉营地】",
+    "support": "觉得帮到你的话，可以意思一下 😋",
+    "rewardAlt": "微信赞赏码"
+  },
   "help": {
     "title": "帮助",
     "navigation": "导航",
