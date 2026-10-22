@@ -2,12 +2,6 @@ import { OnlineProviderError } from '../../types/onlineMusic';
 import type { OnlineMusicProvider, OnlineProviderId, ProviderCapabilities } from '../../types/onlineMusic';
 import type { SongResult } from '../../types';
 import { getPlaybackSourceRef } from '../../utils/appPlaybackGuards';
-import { neteaseProvider } from './netease/neteaseProvider';
-import { kugouProvider } from './kugou/kugouProvider';
-import { qqProvider } from './qq/qqProvider';
-import { bodianProvider } from './bodian/bodianProvider';
-import { ytmProvider } from './ytm/ytmProvider';
-import { spotifyProvider } from './spotify/spotifyProvider';
 
 // src/services/onlineMusic/providerRegistry.ts
 
@@ -104,9 +98,6 @@ export const requireOnlineMusicProviderForSong = (song: SongResult): OnlineMusic
     return requireOnlineMusicProvider(sourceRef.providerId);
 };
 
-registerOnlineMusicProvider(neteaseProvider);
-registerOnlineMusicProvider(kugouProvider);
-registerOnlineMusicProvider(qqProvider);
-registerOnlineMusicProvider(bodianProvider);
-registerOnlineMusicProvider(ytmProvider);
-registerOnlineMusicProvider(spotifyProvider);
+// Local-only build (Sage's local branch): no online platform provider is registered, so the
+// app only plays music the user imports from local files. Online search, platform accounts
+// and sign-in are unreachable because every online feature routes through this registry.
