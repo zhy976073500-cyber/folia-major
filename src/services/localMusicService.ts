@@ -22,12 +22,13 @@ import {
     stageLocalCoverAsset,
     type PreparedLocalCoverBlob,
 } from './localCoverAssetService';
-import { hasLocalCoverBinary } from './localCoverBinaryStore';
+import { hasLocalCoverBinary, isLocalCoverAssetRuntimeSupported } from './localCoverBinaryStore';
 import { hasLocalSongCover } from '../utils/localSongCover';
 import { createFoliaIgnoreMatcher, isIgnoredByFoliaMatchers, type FoliaIgnoreMatcher } from '../utils/foliaIgnore';
 import { getLocalLibraryAvailability } from './localLibraryAvailability';
 import { deleteLocalSongBlobs, getLocalSongBlob, putLocalSongBlob, sweepOrphanedLocalSongBlobs } from './localSongBlobStore';
 import { searchItunesCoverMatch } from './itunesCoverMatch';
+import { searchMusicBrainzCoverMatch } from './musicBrainzCoverMatch';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 import { getLocalLyricFilePriority, isSameLocalLyricFormatOrder, normalizeLocalLyricFormatOrder, type LocalLyricFileFormat } from '../utils/lyrics/localLyricFormatOrder';
 import { readLyricFile } from '../utils/lyrics/lyricFileDecoding';
@@ -1242,9 +1243,18 @@ async function importPickedFiles(): Promise<LocalSong[]> {
     return songs;
 }
 
+// A cover only counts when this runtime can actually show it: embedded cover assets are
+// served from OPFS, which iOS WebViews do not have, so there an asset id would render as
+// nothing while still marking the song as covered (and blocking the online cover below).
+const hasUsableCover = (song: LocalSong): boolean => Boolean(
+    song.onlineMetadata?.coverUrl
+    || (song.localCoverAssetId && isLocalCoverAssetRuntimeSupported()),
+);
+
 // ensureLocalSongCoverAsset reaches a song through its folder handle, which picked songs
 // never have; their bytes are the copied blob, so the cover has to be read from there.
 async function ensurePickedSongCoverAsset(song: LocalSong): Promise<LocalSong> {
+    if (!isLocalCoverAssetRuntimeSupported()) return song;
     if (song.localCoverAssetId && await hasLocalCoverBinary(song.localCoverAssetId)) return song;
     const file = await resolveCopiedSongFile(song);
     if (!file) return song;
@@ -1300,7 +1310,7 @@ export async function sweepIdentifyPickedSongs(): Promise<void> {
         const missing = (await getLocalSongs())
             .filter(song => song.folderName === PICKED_FILES_ROOT_NAME)
             .filter(song => (
-                (!hasLocalSongCover(song) && !song.onlineMetadata?.coverUrl)
+                !hasUsableCover(song)
                 || (!song.markedPureMusic
                     && !song.matchedLyrics
                     && !song.localLyricsContent
@@ -1316,8 +1326,9 @@ export async function sweepIdentifyPickedSongs(): Promise<void> {
 
 // Identifies picked songs against public sources, for a build whose platform providers are
 // absent: the embedded cover first (picked songs have no folder handle for the usual
-// hydration to read), then an iTunes cover match, then lyrics through the usual matching
-// (answered by the direct public sources: AMLL keyword search and LRCLIB). One song at a
+// hydration to read), then an online cover match (iTunes, then MusicBrainz / Cover Art
+// Archive), then lyrics through the usual matching (answered by the direct public
+// sources: AMLL keyword search and LRCLIB). One song at a
 // time, and every miss is quiet: identification is a bonus on top of the import, never a
 // condition of it.
 async function identifyPickedSongs(songs: LocalSong[]): Promise<void> {
@@ -1325,14 +1336,27 @@ async function identifyPickedSongs(songs: LocalSong[]): Promise<void> {
         try {
             let song = (await getLocalSongs()).find(candidate => candidate.id === imported.id) ?? imported;
 
-            if (!hasLocalSongCover(song)) {
+            // Lyrics before covers on purpose: matchLyrics writes the lyric match's
+            // metadata back, and lyric sources carry no cover, so a cover written first
+            // would be overwritten by that write. The cover pass runs last and sticks.
+            const lacksLyrics = !song.markedPureMusic
+                && !song.matchedLyrics
+                && !song.localLyricsContent
+                && !song.embeddedLyricsContent;
+            if (lacksLyrics) {
+                await matchLyrics(song);
+                song = (await getLocalSongs()).find(candidate => candidate.id === imported.id) ?? song;
+            }
+
+            if (!hasUsableCover(song)) {
                 song = await ensurePickedSongCoverAsset(song);
             }
-            if (!hasLocalSongCover(song) && !song.onlineMetadata?.coverUrl) {
+            if (!hasUsableCover(song)) {
                 const artist = song.importedMetadata?.artistNames?.[0]
                     ?? extractMetadataFromFilename(song.fileName).artist
                     ?? '';
-                const hit = await searchItunesCoverMatch(song.title, artist);
+                const hit = await searchItunesCoverMatch(song.title, artist)
+                    ?? await searchMusicBrainzCoverMatch(song.title, artist);
                 if (hit) {
                     await applyMatchedMetadata(song.id, {
                         source: 'lrclib',
@@ -1348,14 +1372,6 @@ async function identifyPickedSongs(songs: LocalSong[]): Promise<void> {
                     });
                     song = (await getLocalSongs()).find(candidate => candidate.id === imported.id) ?? song;
                 }
-            }
-
-            const lacksLyrics = !song.markedPureMusic
-                && !song.matchedLyrics
-                && !song.localLyricsContent
-                && !song.embeddedLyricsContent;
-            if (lacksLyrics) {
-                await matchLyrics(song);
             }
         } catch (error) {
             console.warn(`[LocalMusic][Import] Failed to identify picked song ${imported.fileName}:`, error);
