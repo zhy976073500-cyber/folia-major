@@ -18,8 +18,10 @@ import type { LocalSongMetadataLyricCandidate } from './localSongMatchContext';
 // src/utils/lyrics/autoMatchBestLyric.ts
 // Utility module for preferring word-by-word lyrics while retaining a usable line-by-line fallback.
 
-const PROVIDER_SEARCH_TIMEOUT_MS = 3500;
-const PROVIDER_LYRIC_TIMEOUT_MS = 5000;
+// 本地版说明：这里的直连公共源（AMLL / LRCLIB）从国内访问延迟较高，原 3.5s / 5s 预算经常
+// 在返回前就被切掉，故放宽到 8s；识别在后台逐首进行，慢一点不阻塞导入和播放。
+const PROVIDER_SEARCH_TIMEOUT_MS = 8000;
+const PROVIDER_LYRIC_TIMEOUT_MS = 8000;
 const AUTO_MATCH_SEARCH_LIMIT = 10;
 const AUTO_MATCH_MIN_SCORE = 75;
 const SHOULD_LOG_MATCH_DETAILS = import.meta.env.DEV;
@@ -371,6 +373,33 @@ async function matchUnderArtist(
         return null;
     };
 
+    // 本地版补充：按 ID 探测依赖平台候选，本地版没有平台候选可用，所以再按歌名 + 歌手
+    // 直接搜 AMLL 官方库（其 access 本就支持关键词搜索，只是自动匹配此前没用上）。
+    const tryAmllSearch = async (): Promise<AutoMatchBestLyricResult> => {
+        const song = await getBestCandidate('amll');
+        if (!song) return null;
+        const processed = await getProcessed('amll', song) as
+            (ProviderLyricsResult & { matchedLyricsProviderPlatform?: 'ncm' | 'qq' }) | null;
+        if (!processed || processed.isPureMusic || !hasRenderableLyrics(processed.lyrics)) return null;
+        const match: AutoMatchBestLyricMatch = {
+            lyrics: processed.lyrics,
+            source: 'amll',
+            id: song.id,
+            song,
+            ...(processed.matchedLyricsProviderPlatform
+                ? { matchedLyricsProviderPlatform: processed.matchedLyricsProviderPlatform }
+                : {}),
+            ...(song.qqMid ? { qqMid: song.qqMid } : {}),
+        };
+        if (processed.lyrics.isWordByWord) {
+            console.log('[autoMatchBestLyric] Found AMLLDB word-by-word lyric match from direct search!');
+            return match;
+        }
+        lineByLineFallback ??= match;
+        console.log('[autoMatchBestLyric] Keeping AMLLDB direct-search lyrics as fallback.');
+        return null;
+    };
+
     // AMLL DB keeps lyrics under NetEase and QQ song ids, so it is asked about those two sources'
     // candidates: the QQ song picked in the metadata dialog when there is one, then NetEase's.
     const tryAmllDb = async (): Promise<AutoMatchBestLyricResult> => {
@@ -389,8 +418,8 @@ async function matchUnderArtist(
 
         const neteaseCandidate = await getBestCandidate('netease');
         if (!neteaseCandidate) {
-            console.log('[autoMatchBestLyric] Skipping AMLLDB auto probe because no reliable NetEase candidate id was found.');
-            return null;
+            console.log('[autoMatchBestLyric] No NetEase candidate id for the AMLLDB probe; searching AMLLDB directly instead.');
+            return tryAmllSearch();
         }
 
         const result = await tryAmllDbCandidate('ncm', neteaseCandidate);
@@ -400,8 +429,8 @@ async function matchUnderArtist(
             }
             lineByLineFallback ??= result;
         }
-        console.log('[autoMatchBestLyric] AMLLDB auto probe finished after NCM miss; QQ AMLLDB probing is reserved for manual matching.');
-        return null;
+        console.log('[autoMatchBestLyric] AMLLDB auto probe finished after NCM miss; searching AMLLDB directly instead.');
+        return tryAmllSearch();
     };
 
     // LRCLIB, the other non-platform source, searches a public lyrics library directly. Its

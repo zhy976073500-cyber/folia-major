@@ -1285,11 +1285,41 @@ export async function sweepPickedSongEmbeddedCovers(): Promise<void> {
     }
 }
 
+let pickedIdentifySweepDone = false;
+const PICKED_IDENTIFY_SWEEP_LIMIT = 15;
+
+// Import-time identification only reaches the songs imported in that moment, and a miss
+// there (offline, slow public source) used to be final. Once per launch, songs still
+// missing a cover or lyrics get another identification pass; capped and sequential so
+// the public sources are never hammered. Skipped entirely while offline.
+export async function sweepIdentifyPickedSongs(): Promise<void> {
+    if (pickedIdentifySweepDone) return;
+    pickedIdentifySweepDone = true;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    try {
+        const missing = (await getLocalSongs())
+            .filter(song => song.folderName === PICKED_FILES_ROOT_NAME)
+            .filter(song => (
+                (!hasLocalSongCover(song) && !song.onlineMetadata?.coverUrl)
+                || (!song.markedPureMusic
+                    && !song.matchedLyrics
+                    && !song.localLyricsContent
+                    && !song.embeddedLyricsContent)
+            ))
+            .slice(0, PICKED_IDENTIFY_SWEEP_LIMIT);
+        if (missing.length === 0) return;
+        await identifyPickedSongs(missing);
+    } catch (error) {
+        console.warn('[LocalMusic] Picked-song identification sweep failed:', error);
+    }
+}
+
 // Identifies picked songs against public sources, for a build whose platform providers are
 // absent: the embedded cover first (picked songs have no folder handle for the usual
 // hydration to read), then an iTunes cover match, then lyrics through the usual matching
-// (which can only be answered by LRCLIB here). One song at a time, and every miss is quiet:
-// identification is a bonus on top of the import, never a condition of it.
+// (answered by the direct public sources: AMLL keyword search and LRCLIB). One song at a
+// time, and every miss is quiet: identification is a bonus on top of the import, never a
+// condition of it.
 async function identifyPickedSongs(songs: LocalSong[]): Promise<void> {
     for (const imported of songs) {
         try {
