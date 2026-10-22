@@ -41,6 +41,10 @@ const ENTRIES = [
     { id: 'qq', labelKey: 'lyricProvider.qq', platform: true },
     { id: 'kugou', labelKey: 'lyricProvider.kugou', platform: true },
     { id: 'spotify', labelKey: 'lyricProvider.spotify', platform: true, needsAccount: true, linesOnly: true },
+    // LRCLIB is a public lyrics library reached directly, not through a music platform; it
+    // is what lets a build without any platform provider (the local-only iOS build) still
+    // identify local songs. Line-timed only, so it can only ever be the fallback.
+    { id: 'lrclib', labelKey: 'lyricProvider.lrclib', platform: false, linesOnly: true },
 ] as const satisfies readonly LyricSourceEntry[];
 
 export type LyricProviderSource = (typeof ENTRIES)[number]['id'];

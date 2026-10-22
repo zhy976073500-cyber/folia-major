@@ -27,6 +27,7 @@ import { hasLocalSongCover } from '../utils/localSongCover';
 import { createFoliaIgnoreMatcher, isIgnoredByFoliaMatchers, type FoliaIgnoreMatcher } from '../utils/foliaIgnore';
 import { getLocalLibraryAvailability } from './localLibraryAvailability';
 import { deleteLocalSongBlobs, getLocalSongBlob, putLocalSongBlob, sweepOrphanedLocalSongBlobs } from './localSongBlobStore';
+import { searchItunesCoverMatch } from './itunesCoverMatch';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 import { getLocalLyricFilePriority, isSameLocalLyricFormatOrder, normalizeLocalLyricFormatOrder, type LocalLyricFileFormat } from '../utils/lyrics/localLyricFormatOrder';
 import { readLyricFile } from '../utils/lyrics/lyricFileDecoding';
@@ -1235,7 +1236,59 @@ async function importPickedFiles(): Promise<LocalSong[]> {
     void hydrateImportedSongsInBackground(PICKED_FILES_ROOT_NAME, songs).catch(error => {
         console.error('[LocalMusic][Import] Background metadata hydration failed for picked files:', error);
     });
+    void identifyPickedSongs(songs).catch(error => {
+        console.error('[LocalMusic][Import] Public identification failed for picked files:', error);
+    });
     return songs;
+}
+
+// Identifies picked songs against public sources, for a build whose platform providers are
+// absent: the embedded cover first (picked songs have no folder handle for the usual
+// hydration to read), then an iTunes cover match, then lyrics through the usual matching
+// (which can only be answered by LRCLIB here). One song at a time, and every miss is quiet:
+// identification is a bonus on top of the import, never a condition of it.
+async function identifyPickedSongs(songs: LocalSong[]): Promise<void> {
+    for (const imported of songs) {
+        try {
+            let song = (await getLocalSongs()).find(candidate => candidate.id === imported.id) ?? imported;
+
+            if (!hasLocalSongCover(song)) {
+                song = await ensureLocalSongCoverAsset(song);
+            }
+            if (!hasLocalSongCover(song) && !song.onlineMetadata?.coverUrl) {
+                const artist = song.importedMetadata?.artistNames?.[0]
+                    ?? extractMetadataFromFilename(song.fileName).artist
+                    ?? '';
+                const hit = await searchItunesCoverMatch(song.title, artist);
+                if (hit) {
+                    await applyMatchedMetadata(song.id, {
+                        source: 'lrclib',
+                        songId: hit.trackId,
+                        title: hit.title,
+                        artists: hit.artist ? [{ name: hit.artist }] : [],
+                        album: hit.album ? { name: hit.album } : undefined,
+                        coverUrl: hit.coverUrl,
+                    }, {
+                        songPatch: { useOnlineCover: true },
+                        protectOrigins: ['manual', 'manual-match', 'split'],
+                        skipIfMarkedPureMusic: true,
+                    });
+                    song = (await getLocalSongs()).find(candidate => candidate.id === imported.id) ?? song;
+                }
+            }
+
+            const lacksLyrics = !song.markedPureMusic
+                && !song.matchedLyrics
+                && !song.localLyricsContent
+                && !song.embeddedLyricsContent;
+            if (lacksLyrics) {
+                await matchLyrics(song);
+            }
+        } catch (error) {
+            console.warn(`[LocalMusic][Import] Failed to identify picked song ${imported.fileName}:`, error);
+        }
+    }
+    notifyLocalMusicUpdated();
 }
 
 async function importFolderContents(dirHandle: FileSystemDirectoryHandle, expectedRootName?: string): Promise<LocalSong[]> {

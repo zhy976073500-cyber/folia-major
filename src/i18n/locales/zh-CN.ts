@@ -1705,6 +1705,7 @@ export default {
     "kugou": "酷狗音乐",
     "spotify": "Spotify",
     "amll": "AMLLDB",
+    "lrclib": "LRCLIB 歌词库",
   },
   "globalLyricOffset": {
     "title": "全局时间偏移",

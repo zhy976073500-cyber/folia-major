@@ -5,6 +5,7 @@ import type { ChorusRange, ProviderLyricsResult } from '../../types/onlineMusic'
 import { calculateMatchScore } from './matchScore';
 import { searchQQLyrics, fetchQQLyrics } from '../../services/onlineMusic/qq/qqLyricProvider';
 import { fetchAmllDbLyrics, getAmllDbMusicIds, searchAmllDbSongs } from './providers/amllDbProvider';
+import { fetchLrclibLyrics, searchLrclibSongs } from './providers/lrclibProvider';
 import { buildAmllDbSearchQueries, toAmllDbSongResults } from './amllDbCandidates';
 import { applyChorusRangesByTime } from './chorusEffects';
 import { hasRenderableLyrics } from './validity';
@@ -147,6 +148,13 @@ const OWN_ACCESS: Partial<Record<LyricProviderSource, Partial<LyricSourceAccess>
     },
     kugou: {
         songKey: song => String(song.kgHash ?? song.id).toUpperCase(),
+    },
+    // LRCLIB is searched and fetched through its own public API and knows a song by its
+    // numeric track id there.
+    lrclib: {
+        search: (query, _limit, target) => searchLrclibSongs(query, target),
+        fetch: async song => fetchLrclibLyrics(song),
+        songKey: song => String(song.id),
     },
 };
 

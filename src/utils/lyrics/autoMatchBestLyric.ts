@@ -404,6 +404,28 @@ async function matchUnderArtist(
         return null;
     };
 
+    // LRCLIB, the other non-platform source, searches a public lyrics library directly. Its
+    // lyrics are line-timed only, so a hit is kept as the fallback and never ends the pick.
+    const tryLrclib = async (): Promise<AutoMatchBestLyricResult> => {
+        if (lineByLineFallback) return null;
+        const song = await getBestCandidate('lrclib');
+        if (!song) return null;
+        const processed = await getProcessed('lrclib', song);
+        if (!processed) return null;
+        if (processed.isPureMusic) {
+            return { isPureMusic: true, source: 'lrclib', id: song.id };
+        }
+        if (!hasRenderableLyrics(processed.lyrics)) return null;
+        lineByLineFallback ??= {
+            lyrics: processed.lyrics,
+            source: 'lrclib',
+            id: song.id,
+            song,
+        };
+        console.log('[autoMatchBestLyric] Keeping lrclib line-by-line lyrics as fallback.');
+        return null;
+    };
+
     for (const source of searchOrder) {
         try {
             // AMLL DB is the one source that is not a platform: it has no songs of its own to search,
@@ -411,7 +433,8 @@ async function matchUnderArtist(
             // passed over.
             const settled = getLyricSource(source).platform
                 ? await tryPlatformSource(source)
-                : source === 'amll' ? await tryAmllDb() : null;
+                : source === 'amll' ? await tryAmllDb()
+                : source === 'lrclib' ? await tryLrclib() : null;
             if (settled) return settled;
         } catch (error) {
             console.error(`[autoMatchBestLyric] ${source} search/fetch failed:`, error);
