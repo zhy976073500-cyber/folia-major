@@ -23,6 +23,11 @@ export interface ThemeRegistryRecord {
   [key: string]: unknown;
 }
 
+export interface LocalSongBlobRecord {
+  id: string;
+  blob: Blob;
+}
+
 export class AppDatabase extends Dexie {
   session!: Table<unknown, string>;
   api_cache!: Table<StoredCacheEntry, string>;
@@ -34,6 +39,7 @@ export class AppDatabase extends Dexie {
   local_library_entities!: Table<LocalLibraryEntity, string>;
   local_library_assignments!: Table<LocalLibraryAssignment, string>;
   local_cover_assets!: Table<LocalCoverAsset, string>;
+  local_music_blobs!: Table<LocalSongBlobRecord, string>;
 
   constructor(name = APP_DATABASE_NAME) {
     super(name);
@@ -95,6 +101,22 @@ export class AppDatabase extends Dexie {
       local_library_entities: 'id, kind, *normalizedAliases, mergedInto, needsReview, createdAt',
       local_library_assignments: 'songId, *artistEntityIds, albumEntityId, artistOrigin, albumOrigin',
       local_cover_assets: 'id',
+    });
+
+    // local_music_blobs holds the audio bytes of songs imported through the file-picker
+    // fallback (no File System Access, e.g. iOS), keyed by song id like local_music.
+    this.version(1.0).stores({
+      session: '',
+      api_cache: 'key',
+      user_cache: 'key',
+      media_cache: 'key',
+      metadata_cache: 'key',
+      local_music: 'id, localCoverAssetId',
+      theme_registry: 'fingerprint',
+      local_library_entities: 'id, kind, *normalizedAliases, mergedInto, needsReview, createdAt',
+      local_library_assignments: 'songId, *artistEntityIds, albumEntityId, artistOrigin, albumOrigin',
+      local_cover_assets: 'id',
+      local_music_blobs: 'id',
     });
 
     this.on('versionchange', event => {

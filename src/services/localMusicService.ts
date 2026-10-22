@@ -26,6 +26,7 @@ import { hasLocalCoverBinary } from './localCoverBinaryStore';
 import { hasLocalSongCover } from '../utils/localSongCover';
 import { createFoliaIgnoreMatcher, isIgnoredByFoliaMatchers, type FoliaIgnoreMatcher } from '../utils/foliaIgnore';
 import { getLocalLibraryAvailability } from './localLibraryAvailability';
+import { deleteLocalSongBlobs, getLocalSongBlob, putLocalSongBlob, sweepOrphanedLocalSongBlobs } from './localSongBlobStore';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 import { getLocalLyricFilePriority, isSameLocalLyricFormatOrder, normalizeLocalLyricFormatOrder, type LocalLyricFileFormat } from '../utils/lyrics/localLyricFormatOrder';
 import { readLyricFile } from '../utils/lyrics/lyricFileDecoding';
@@ -1122,6 +1123,12 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
 
 // Import folder using File System Access API (if supported)
 export async function importFolder(expectedRootName?: string): Promise<LocalSong[]> {
+    // File-picker fallback (no showDirectoryPicker, e.g. iOS): pick audio files and copy
+    // them into the app instead of referencing a folder on disk. Fresh imports only;
+    // rescans of handle-backed folders keep the directory flow below.
+    if (!expectedRootName && getLocalLibraryAvailability().pickerFallback) {
+        return runLocalFolderMutation(() => importPickedFiles());
+    }
     // Request access in the user gesture before waiting for other library writes.
     try {
         const dirHandle = await getImportDirectoryHandle(expectedRootName);
@@ -1131,6 +1138,102 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
         if ((error as Error).name === 'AbortError') return [];
         throw error;
     }
+}
+
+// Songs picked through the fallback live under one synthetic root; the name is data (it
+// labels the group in the library), not a folder on any disk.
+const PICKED_FILES_ROOT_NAME = '本地导入';
+
+const pickFilesForFallbackImport = (): Promise<File[]> => new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = 'audio/*,.lrc';
+    input.style.display = 'none';
+    let settled = false;
+    const settle = (files: File[]) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('focus', onFocus);
+        input.remove();
+        resolve(files);
+    };
+    // The picker closing without a change event means the user cancelled; the files
+    // check keeps a slow change event from being mistaken for a cancel.
+    const onFocus = () => {
+        window.setTimeout(() => {
+            if (!input.files || input.files.length === 0) settle([]);
+        }, 2500);
+    };
+    input.addEventListener('change', () => settle(Array.from(input.files ?? [])));
+    input.addEventListener('cancel', () => settle([]));
+    window.addEventListener('focus', onFocus);
+    document.body.appendChild(input);
+    input.click();
+});
+
+async function importPickedFiles(): Promise<LocalSong[]> {
+    const picked = await pickFilesForFallbackImport();
+    const audioFiles = picked.filter(file => isAudioFile(file));
+    if (audioFiles.length === 0) return [];
+
+    // Sidecar lyrics picked alongside the songs, keyed like the folder traversal keys them.
+    const lrcMap = new Map<string, LocalLyricFileCandidate>();
+    for (const file of picked) {
+        if (/\.lrc$/i.test(file.name)) {
+            const baseName = getAudioBasePath(file.name.replace(/\.lrc$/i, ''));
+            if (!lrcMap.has(baseName)) lrcMap.set(baseName, { file });
+        }
+    }
+
+    const existingSongs = await getLocalSongs();
+    const existingByKey = new Map<string, LocalSong>(
+        existingSongs
+            .filter(song => song.folderName === PICKED_FILES_ROOT_NAME)
+            .map(song => [`${song.fileName}\n${song.fileSize}`, song]),
+    );
+    const fileByKey = new Map<string, File>(audioFiles.map(file => [`${file.name}\n${file.size}`, file]));
+
+    const coverBlobCache = new Map<string, Promise<PreparedLocalCoverBlob | undefined>>();
+    const results = await mapWithConcurrency(audioFiles, IMPORT_CONCURRENCY, async file => {
+        const existingSong = existingByKey.get(`${file.name}\n${file.size}`);
+        const entry: FileEntryForImport = {
+            // No directory entry exists for a picked file; the fabricated entry only
+            // carries the file itself, and playback resolves these songs from the
+            // copied blob (see resolveCopiedSongFile), never from this handle.
+            handle: undefined as unknown as FileSystemFileHandle,
+            file,
+            folderName: PICKED_FILES_ROOT_NAME,
+            relativePath: file.name,
+            sidecarLyricFilesChanged: true,
+        };
+        return buildImportedSong(entry, lrcMap, new Map(), new Map(), coverBlobCache, true, existingSong);
+    });
+
+    const songs = results
+        .map(result => result.song)
+        .filter((song): song is LocalSong => Boolean(song));
+    if (songs.length === 0) return [];
+
+    // Copy the audio in before the records land, so a stored song never points at bytes
+    // that are not there. An unchanged re-pick keeps the copy it already has.
+    for (const song of songs) {
+        const key = `${song.fileName}\n${song.fileSize}`;
+        const existingSong = existingByKey.get(key);
+        const unchanged = existingSong && existingSong.id === song.id
+            && existingSong.fileSignature === song.fileSignature;
+        if (unchanged) continue;
+        const file = fileByKey.get(key);
+        if (file) await putLocalSongBlob(song.id, file);
+    }
+
+    await saveLocalSongs(songs);
+    await sweepOrphanedLocalSongBlobs(new Set((await getLocalSongs()).map(song => song.id)));
+    notifyLocalMusicUpdated();
+    void hydrateImportedSongsInBackground(PICKED_FILES_ROOT_NAME, songs).catch(error => {
+        console.error('[LocalMusic][Import] Background metadata hydration failed for picked files:', error);
+    });
+    return songs;
 }
 
 async function importFolderContents(dirHandle: FileSystemDirectoryHandle, expectedRootName?: string): Promise<LocalSong[]> {
@@ -1504,6 +1607,7 @@ export async function deleteLocalSong(id: string): Promise<void> {
     fileHandleMap.delete(id);
     await Promise.all([
         dbDeleteLocalSong(id),
+        deleteLocalSongBlobs([id]),
         removeCachedCover(`cover_local_${id}`),
     ]);
 }
@@ -1604,7 +1708,25 @@ async function cleanupDirHandleIfUnused(rootFolderName: string): Promise<void> {
 
 // Get audio blob from local song using fileHandle
 // Returns blob URL if fileHandle exists, null otherwise
+/** The picked file copied into the app database (file-picker fallback import), if any. */
+const resolveCopiedSongFile = async (song: LocalSong): Promise<File | null> => {
+    try {
+        const blob = await getLocalSongBlob(song.id);
+        if (!blob) return null;
+        return new File([blob], song.fileName, {
+            type: song.mimeType || blob.type,
+            lastModified: song.fileLastModified,
+        });
+    } catch (error) {
+        console.warn(`[LocalMusic] Failed to read copied audio for ${song.id}:`, error);
+        return null;
+    }
+};
+
 export async function getAudioFromLocalSong(song: LocalSong): Promise<string | null> {
+    const copiedFile = await resolveCopiedSongFile(song);
+    if (copiedFile) return getAudioFromFile(copiedFile);
+
     const fileHandle = await getAccessibleFileHandle(song);
 
     if (fileHandle) {
@@ -1636,6 +1758,9 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
 
 /** Resolves the current File for playback recovery without changing the song or minting a URL. */
 export async function getFileFromLocalSong(song: LocalSong): Promise<File | null> {
+    const copiedFile = await resolveCopiedSongFile(song);
+    if (copiedFile) return copiedFile;
+
     const fileHandle = await getAccessibleFileHandle(song);
     if (fileHandle) {
         try {
@@ -1666,6 +1791,9 @@ export async function getFileFromLocalSong(song: LocalSong): Promise<File | null
  * but returns the ArrayBuffer. Null when no handle can be reached - permission not restored, or moved.
  */
 export async function getLocalSongArrayBuffer(song: LocalSong): Promise<ArrayBuffer | null> {
+    const copiedFile = await resolveCopiedSongFile(song);
+    if (copiedFile) return copiedFile.arrayBuffer();
+
     const fileHandle = await getAccessibleFileHandle(song);
     if (!fileHandle) {
         console.warn(`[LocalMusic] No accessible handle for song ${song.id} (automix bytes)`);
@@ -1770,6 +1898,7 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
     });
     await Promise.all([
         dbDeleteLocalSongs(uniqueSongIds),
+        deleteLocalSongBlobs(uniqueSongIds),
         ...uniqueSongIds.map(id => removeCachedCover(`cover_local_${id}`)),
     ]);
     await removeDeletedSongIdsFromPlaylists(uniqueSongIds);
@@ -1883,6 +2012,7 @@ async function deleteFolderContents(folderName: string): Promise<void> {
     });
     await Promise.all([
         dbDeleteLocalSongs(songIdsToDelete),
+        deleteLocalSongBlobs(songIdsToDelete),
         ...songIdsToDelete.map(id => removeCachedCover(`cover_local_${id}`)),
     ]);
     await removeDeletedSongIdsFromPlaylists(songIdsToDelete);
