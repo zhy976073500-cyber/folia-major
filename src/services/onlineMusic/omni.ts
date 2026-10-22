@@ -130,7 +130,26 @@ const noteAudioSourceLevel = (url: string, handedOut: HandedOutAudioSource): voi
 const activeProviderId = (): OmniProviderId => {
     const storedProviderId = useOnlineProviderAccountStore.getState().activeProviderId;
     // A persisted selection can outlive its provider when switching builds or branches.
-    return getOnlineMusicProvider(storedProviderId) ? storedProviderId : DEFAULT_ONLINE_PROVIDER_ID;
+    if (getOnlineMusicProvider(storedProviderId)) return storedProviderId;
+    // Local-only build: no online provider is registered at all. Fall back to any registered
+    // provider before the default so an empty registry stays representable; capability reads
+    // below answer with NO_PROVIDER_CAPABILITIES instead of throwing during first render.
+    return listOnlineMusicProviders()[0]?.id ?? DEFAULT_ONLINE_PROVIDER_ID;
+};
+
+// Every capability off: what the UI should see when no online provider exists (local-only build).
+const NO_PROVIDER_CAPABILITIES: OmniProviderCapabilities = {
+    search: false,
+    playback: false,
+    lyrics: false,
+    auth: false,
+    userLibrary: false,
+    playlists: false,
+    albums: false,
+    artists: false,
+    recommendations: false,
+    mutations: false,
+    wordByWordLyrics: false,
 };
 
 const activeProvider = () => requireOnlineMusicProvider(activeProviderId());
@@ -517,15 +536,15 @@ export const omni = {
     },
 
     getActiveCapabilities(): OmniProviderCapabilities {
-        return activeProvider().capabilities;
+        return getOnlineMusicProvider(activeProviderId())?.capabilities ?? NO_PROVIDER_CAPABILITIES;
     },
 
     getProviderCapabilities(providerId: OmniProviderId): OmniProviderCapabilities {
-        return requireOnlineMusicProvider(providerId).capabilities;
+        return getOnlineMusicProvider(providerId)?.capabilities ?? NO_PROVIDER_CAPABILITIES;
     },
 
     supportsDailySongs(providerId: OmniProviderId): boolean {
-        return typeof requireOnlineMusicProvider(providerId).recommendations?.getDailySongs === 'function';
+        return typeof getOnlineMusicProvider(providerId)?.recommendations?.getDailySongs === 'function';
     },
 
     getProviderLabel(providerId: OmniProviderId): string {
