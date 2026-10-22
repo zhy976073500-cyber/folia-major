@@ -5,6 +5,7 @@ import {
     stopLocalLibraryAutoScan,
     subscribeLocalLibraryAutoScan,
 } from '../services/localLibraryAutoScan';
+import { sweepPickedSongEmbeddedCovers } from '../services/localMusicService';
 import type { LocalLibraryAutoScanState } from '../types/localLibraryWatch';
 
 // src/hooks/useLocalLibraryAutoScan.ts
@@ -15,6 +16,7 @@ import type { LocalLibraryAutoScanState } from '../types/localLibraryWatch';
 export const useLocalLibraryAutoScan = (): void => {
     useEffect(() => {
         startLocalLibraryAutoScan();
+        void sweepPickedSongEmbeddedCovers();
         return () => stopLocalLibraryAutoScan();
     }, []);
 };

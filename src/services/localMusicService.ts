@@ -1242,6 +1242,49 @@ async function importPickedFiles(): Promise<LocalSong[]> {
     return songs;
 }
 
+// ensureLocalSongCoverAsset reaches a song through its folder handle, which picked songs
+// never have; their bytes are the copied blob, so the cover has to be read from there.
+async function ensurePickedSongCoverAsset(song: LocalSong): Promise<LocalSong> {
+    if (song.localCoverAssetId && await hasLocalCoverBinary(song.localCoverAssetId)) return song;
+    const file = await resolveCopiedSongFile(song);
+    if (!file) return song;
+    const metadata = await extractEmbeddedMetadata(file, true);
+    if (!metadata.cover || !metadata.coverAssetId) return song;
+    stageLocalCoverAsset(metadata.coverAssetId, metadata.cover);
+    const updatedSong: LocalSong = {
+        ...song,
+        localCoverAssetId: metadata.coverAssetId,
+        localCoverSource: 'embedded',
+    };
+    await saveLocalSong(updatedSong);
+    return updatedSong;
+}
+
+let pickedCoverSweepDone = false;
+
+// Songs picked before embedded covers were read from the copied blob keep no cover asset;
+// read the covers they already carry, once per launch. Local work only, no network.
+export async function sweepPickedSongEmbeddedCovers(): Promise<void> {
+    if (pickedCoverSweepDone) return;
+    pickedCoverSweepDone = true;
+    try {
+        const songs = (await getLocalSongs()).filter(song => (
+            song.folderName === PICKED_FILES_ROOT_NAME && !song.localCoverAssetId
+        ));
+        if (songs.length === 0) return;
+        for (const song of songs) {
+            try {
+                await ensurePickedSongCoverAsset(song);
+            } catch (error) {
+                console.warn(`[LocalMusic] Failed to sweep embedded cover for ${song.fileName}:`, error);
+            }
+        }
+        notifyLocalMusicUpdated();
+    } catch (error) {
+        console.warn('[LocalMusic] Picked-song cover sweep failed:', error);
+    }
+}
+
 // Identifies picked songs against public sources, for a build whose platform providers are
 // absent: the embedded cover first (picked songs have no folder handle for the usual
 // hydration to read), then an iTunes cover match, then lyrics through the usual matching
@@ -1253,7 +1296,7 @@ async function identifyPickedSongs(songs: LocalSong[]): Promise<void> {
             let song = (await getLocalSongs()).find(candidate => candidate.id === imported.id) ?? imported;
 
             if (!hasLocalSongCover(song)) {
-                song = await ensureLocalSongCoverAsset(song);
+                song = await ensurePickedSongCoverAsset(song);
             }
             if (!hasLocalSongCover(song) && !song.onlineMetadata?.coverUrl) {
                 const artist = song.importedMetadata?.artistNames?.[0]
