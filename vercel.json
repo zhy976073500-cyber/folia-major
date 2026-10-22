@@ -1,6 +1,1 @@
-{
-  "ignoreCommand": "git rev-parse --verify -q HEAD^ >/dev/null && git diff --quiet HEAD^ HEAD -- . ':(exclude)docs/CODEMAP.md'",
-  "rewrites": [
-    { "source": "/api/qq/:path*", "destination": "/api/qq?path=/:path*" }
-  ]
-}
+{"ignoreCommand":"git rev-parse --verify -q HEAD^ >/dev/null && git diff --quiet HEAD^ HEAD -- . ':(exclude)docs/CODEMAP.md'","rewrites":[{"destination":"/api/qq?path=/:path*","source":"/api/qq/:path*"},{"destination":"https://api-enhanced-ashen-eight.vercel.app/:path*","source":"/api/netease/:path*"},{"destination":"https://ku-gou-music-api-eosin.vercel.app/:path*","source":"/api/kugou/:path*"}]}
