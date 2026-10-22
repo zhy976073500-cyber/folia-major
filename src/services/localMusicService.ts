@@ -1148,7 +1148,9 @@ const pickFilesForFallbackImport = (): Promise<File[]> => new Promise(resolve =>
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
-    input.accept = 'audio/*,.lrc';
+    // Extensions are listed one by one on purpose: an 'audio/*' wildcard makes the iOS
+    // document picker grey out files it should accept (MP3s in particular).
+    input.accept = '.mp3,.flac,.m4a,.wav,.ogg,.opus,.aac,.lrc';
     input.style.display = 'none';
     let settled = false;
     const settle = (files: File[]) => {
