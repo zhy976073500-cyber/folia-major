@@ -1657,8 +1657,11 @@ export default {
     "intro": "Penulis aslinya tidak pernah merilis versi iOS, sementara banyak orang di Douyin memungut biaya untuk versi hasil deploy AI. Jadi saya deploy sendiri dan membagikannya secara gratis.",
     "feedback": "Masukan dan pembaruan versi: cari Akun Resmi WeChat 【Coco果粉营地】",
     "more": "Sumber daya iOS berkualitas lainnya: cari Douyin 【Coco果粉营地】",
-    "support": "Kalau merasa terbantu, boleh memberi apresiasi sedikit 😋",
-    "rewardAlt": "Kode QR apresiasi WeChat"
+    "support": "Pindai untuk mengikuti: pembaruan dan lebih banyak sumber daya",
+    "wechatAlt": "Kode QR Akun Resmi WeChat",
+    "douyinAlt": "Kode QR Douyin",
+    "wechatLabel": "WeChat",
+    "douyinLabel": "Douyin"
   },
   "help": {
     "title": "Bantuan",

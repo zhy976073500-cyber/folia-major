@@ -5,7 +5,7 @@ import { getStoredString, setStoredString } from '../../stores/storagePrimitives
 import { usePlaybackEntryViewStore } from '../../stores/usePlaybackEntryViewStore';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
-import { SAGE_REWARD_CODE_URL } from './sageRewardCode';
+import { SAGE_DOUYIN_QR_URL, SAGE_WECHAT_QR_URL } from './sageFollowCodes';
 
 // src/components/modal/SageAnnouncementDialog.tsx
 // Sage 自建实例的公告：每个自然日最多自动出现一次，并等启动流程和设置窗口空闲后再显示。
@@ -78,11 +78,28 @@ const SageAnnouncementDialog: React.FC<SageAnnouncementDialogProps> = ({ isStart
                 <p className="pt-1 text-center text-[13px] leading-[21px] text-[color:var(--st-t2)]">
                     {t('sageAnnouncement.support')}
                 </p>
-                <img
-                    src={SAGE_REWARD_CODE_URL}
-                    alt={t('sageAnnouncement.rewardAlt')}
-                    className="mx-auto aspect-square w-60 max-w-full rounded-2xl object-cover shadow-[0_0_0_1px_var(--st-line)]"
-                />
+                <div className="flex items-start justify-center gap-4">
+                    <figure className="w-40 max-w-[46%]">
+                        <img
+                            src={SAGE_WECHAT_QR_URL}
+                            alt={t('sageAnnouncement.wechatAlt')}
+                            className="aspect-square w-full rounded-2xl object-cover shadow-[0_0_0_1px_var(--st-line)]"
+                        />
+                        <figcaption className="mt-2 text-center text-[12px] leading-[18px] text-[color:var(--st-t2)]">
+                            {t('sageAnnouncement.wechatLabel')}
+                        </figcaption>
+                    </figure>
+                    <figure className="w-40 max-w-[46%]">
+                        <img
+                            src={SAGE_DOUYIN_QR_URL}
+                            alt={t('sageAnnouncement.douyinAlt')}
+                            className="aspect-square w-full rounded-2xl object-cover shadow-[0_0_0_1px_var(--st-line)]"
+                        />
+                        <figcaption className="mt-2 text-center text-[12px] leading-[18px] text-[color:var(--st-t2)]">
+                            {t('sageAnnouncement.douyinLabel')}
+                        </figcaption>
+                    </figure>
+                </div>
             </div>
         </Sheet>
     );

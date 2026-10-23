@@ -1657,8 +1657,11 @@ export default {
     "intro": "The original author never released an iOS version, while plenty of people on Douyin are charging for AI-deployed copies. So I deployed one myself, and I am sharing it for free.",
     "feedback": "Feedback and version updates: search WeChat Official Accounts for 【Coco果粉营地】",
     "more": "More quality iOS resources: search Douyin for 【Coco果粉营地】",
-    "support": "If it helped you, a small tip is always appreciated 😋",
-    "rewardAlt": "WeChat tip QR code"
+    "support": "Scan to follow for updates and more resources",
+    "wechatAlt": "WeChat Official Account QR code",
+    "douyinAlt": "Douyin QR code",
+    "wechatLabel": "WeChat",
+    "douyinLabel": "Douyin"
   },
   "help": {
     "title": "Help",

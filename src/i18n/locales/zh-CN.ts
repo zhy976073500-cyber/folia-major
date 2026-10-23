@@ -1657,8 +1657,11 @@ export default {
     "intro": "原作者一直没有推出 iOS 版，抖音上却有一堆人拿着用 AI 部署的版本出来圈钱。我干脆自己部署了一个，免费分享给大家使用。",
     "feedback": "问题反馈、版本更新：微信公众号搜索【Coco果粉营地】",
     "more": "更多 iOS 优质资源：抖音搜索【Coco果粉营地】",
-    "support": "觉得帮到你的话，可以意思一下 😋",
-    "rewardAlt": "微信赞赏码"
+    "support": "扫码关注，第一时间获取更新和更多资源",
+    "wechatAlt": "微信公众号二维码",
+    "douyinAlt": "抖音二维码",
+    "wechatLabel": "微信公众号",
+    "douyinLabel": "抖音"
   },
   "help": {
     "title": "帮助",
