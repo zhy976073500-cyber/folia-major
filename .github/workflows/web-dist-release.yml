@@ -1,0 +1,61 @@
+# Builds the web frontend on GitHub's runners and publishes the dist as a
+# rolling release asset, so the small production ECS box only has to swap
+# files instead of running npm install / vite build itself (both OOM it).
+name: web-dist-release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: web-dist-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build web dist
+        env:
+          VITE_NETEASE_API_BASE: https://folia.cococcfans.cn/api/netease
+          VITE_KUGOU_API_BASE: https://folia.cococcfans.cn/api/kugou
+          VITE_QQ_API_BASE: /api/qq
+        run: npm run build
+
+      - name: Package dist
+        run: |
+          tar -czf folia-dist.tar.gz -C dist .
+          ls -la folia-dist.tar.gz
+
+      - name: Publish rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete web-dist-latest --yes --cleanup-tag || true
+          sleep 3
+          gh release create web-dist-latest folia-dist.tar.gz \
+            --title "Web dist (latest)" \
+            --notes "Auto-built web dist for folia.cococcfans.cn from ${{ github.sha }}"
+
+      - name: Upload workflow artifact (backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-dist
+          path: folia-dist.tar.gz
+          retention-days: 7
