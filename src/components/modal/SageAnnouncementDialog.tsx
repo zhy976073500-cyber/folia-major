@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Sheet, SheetButton } from '../shared/Sheet';
 import { getStoredString, setStoredString } from '../../stores/storagePrimitives';
 import { usePlaybackEntryViewStore } from '../../stores/usePlaybackEntryViewStore';
+import { useSageUpdateNoticeStore } from '../../stores/useSageUpdateNoticeStore';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { SAGE_DOUYIN_QR_URL, SAGE_WECHAT_QR_URL } from './sageFollowCodes';
@@ -26,11 +27,13 @@ const SageAnnouncementDialog: React.FC<SageAnnouncementDialogProps> = ({ isStart
     const { t } = useTranslation();
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const isPlaybackEntryViewPromptOpen = usePlaybackEntryViewStore(state => state.isPlaybackEntryViewPromptOpen);
+    const isUpdateNoticeOpen = useSageUpdateNoticeStore(state => state.isUpdateNoticeOpen);
     const isSettingsOpen = useSettingsModalStore(state => state.settingsModalState.isOpen);
     const isUserGuideModalOpen = useSettingsModalStore(state => state.isUserGuideModalOpen);
     const [isOpen, setIsOpen] = useState(false);
 
     const isBlocked = isStartupBlocked
+        || isUpdateNoticeOpen
         || isPlaybackEntryViewPromptOpen
         || isSettingsOpen
         || isUserGuideModalOpen;

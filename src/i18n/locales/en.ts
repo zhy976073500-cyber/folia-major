@@ -1663,6 +1663,11 @@ export default {
     "wechatLabel": "WeChat",
     "douyinLabel": "Douyin"
   },
+  "sageUpdateNotice": {
+    "title": "New Version Available",
+    "body": "A new version has been released. Please update to the latest version.",
+    "button": "Update Now"
+  },
   "help": {
     "title": "Help",
     "navigation": "Navigation",

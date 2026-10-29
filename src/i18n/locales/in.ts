@@ -1663,6 +1663,11 @@ export default {
     "wechatLabel": "WeChat",
     "douyinLabel": "Douyin"
   },
+  "sageUpdateNotice": {
+    "title": "Versi Baru Telah Dirilis",
+    "body": "Versi baru telah dirilis. Silakan perbarui ke versi terbaru.",
+    "button": "Perbarui Sekarang"
+  },
   "help": {
     "title": "Bantuan",
     "navigation": "Navigasi",

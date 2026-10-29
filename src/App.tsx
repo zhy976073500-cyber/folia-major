@@ -29,6 +29,7 @@ import { useMorphKeepsHost } from './components/collectionFlight';
 import { UserGuideModal } from './components/modal/UserGuideModal';
 import ReleaseNotesDialog from './components/modal/ReleaseNotesDialog';
 import SageAnnouncementDialog from './components/modal/SageAnnouncementDialog';
+import SageUpdateNoticeDialog from './components/modal/SageUpdateNoticeDialog';
 import LegacyModelsPrompt from './components/modal/LegacyModelsPrompt';
 import { PlaybackEntryViewPrompt } from './components/modal/playback-entry-view/PlaybackEntryViewPrompt';
 import { LatticeFmNotice } from './components/modal/playback-entry-view/LatticeFmNotice';
@@ -2908,6 +2909,7 @@ export default function App() {
                 isDaylight={isDaylight}
                 onClose={startupExperience.closeReleaseNotes}
             />
+            <SageUpdateNoticeDialog isStartupBlocked={startupExperience.isReleaseNotesOpen} />
             <SageAnnouncementDialog isStartupBlocked={startupExperience.isReleaseNotesOpen} />
             <UserGuideModal theme={theme} />
             <PlaybackEntryViewPrompt theme={theme} />

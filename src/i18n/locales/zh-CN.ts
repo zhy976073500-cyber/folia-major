@@ -1663,6 +1663,11 @@ export default {
     "wechatLabel": "微信公众号",
     "douyinLabel": "抖音"
   },
+  "sageUpdateNotice": {
+    "title": "新版本已更新",
+    "body": "新版本已更新，请前往更新新版本。",
+    "button": "前往更新"
+  },
   "help": {
     "title": "帮助",
     "navigation": "导航",
